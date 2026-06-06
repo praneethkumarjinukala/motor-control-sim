@@ -1,0 +1,47 @@
+# motor_control.resc  -  Renode simulation script
+#
+# Usage:
+#   renode motor_control.resc
+#   Then in Renode monitor:
+#       start
+#   GDB:
+#       arm-none-eabi-gdb firmware.elf
+#       (gdb) target remote :3333
+#       (gdb) monitor start
+#       (gdb) break SysTick_Handler
+#       (gdb) continue
+#
+# UART output (CSV):  telnet localhost 3456
+# Modbus TCP:         192.168.0.10:502  (from host via TAP interface)
+
+# ---- machine definition ----
+mach create "stm32f407"
+machine LoadPlatformDescription @platforms/boards/stm32f4_discovery-kit.repl
+
+# ---- load firmware ELF ----
+sysbus LoadELF @firmware.elf
+
+# ---- USART2: redirect to telnet on port 3456 ----
+emulation CreateServerSocketTerminal 3456 "uart_terminal" false
+connector Connect sysbus.usart2 uart_terminal
+
+# ---- Ethernet: connect to virtual switch -> host TAP ----
+emulation CreateSwitch "switch"
+connector Connect sysbus.ethernet switch
+emulation CreateTap "tap0" "tap_if"
+connector Connect tap_if switch
+
+# ---- GDB server on port 3333 ----
+machine StartGdbServer 3333
+
+# ---- configure CPU performance for deterministic profiling ----
+cpu PerformanceInMips 168
+
+# ---- helper macros ----
+macro reset
+"""
+    sysbus LoadELF @firmware.elf
+    cpu Reset
+"""
+
+runMacro $reset
